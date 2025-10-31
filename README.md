@@ -21,7 +21,7 @@ pub trait CacheMutCompatible<K, V>: CacheCompatible<K, V> {
 ```
 This can be turned into a cache as so:  
 `let mut cache: CacheMut<i32, String, FolderCache<i32>> = CacheMut::new(folder, 2);`
-where FolderCache<V> is the pre-initialized struct with the Cache and CacheMut traits.  
+where FolderCache<V> is the pre-initialized struct with the CacheCompatible and CacheMutCompatible traits.  
 The cache allows the online viewing of items in the backend through the functions:  
 ```
 fn insert(&mut self, k: K, v: V) -> Result<(), CC::Error>
@@ -33,4 +33,11 @@ fn commit(&mut self) -> Result<(), CC::Error>
 fn active(&self, k: &K) -> bool
 fn num_active(&self) -> usize
 ```
-Note that references retrieved from the cache have no lifespan. The cache will only close (storing all items) when itself and all references are out of scope.
+Note that references retrieved from the cache have no lifespan. The cache will only close (storing all items) when itself and all references are out of scope.  
+Also included is the FolderCache in the `folder_compatible` subsection, which sets up a cache in a folder if both key and value are serde-compatible.
+## TODO
+- Folder cache should have actual commit behavior
+- Commit should be possible when items are active
+- Make multithread locking functions
+- Add a couple more backends (sqlite?)
+- Make try_x functions for non-panicking function variants
