@@ -1,8 +1,36 @@
 # Cache
-This library provides a filesystem cache to Rust. It requires serde to store the keys and values. Cache has two functions: First, it automatically stores objects into the filesystem so that only N most at a time are present. Second,  get() and get_mut() calls may retrieve data from the filesystem, adding it to the cache but maintaining currently taken references. Both get() and get_mut() only need an 'immutable' cache, but insertion and removal still require a mutable reference.
-## Usage notes:
-- Cache currently only supports 'online' caching; that is, objects are dropped into the filesystem directly once dropped. This means that if the cache does not close manually, objects which have been modified and dropped from the cache will be updated and objects which have been modified and not dropped will not be. This means using the cache mutably will need to periodically create a backup in case it unexpectedly drops and breaks.
-## TODO:
-- This crate will become much more flexible when the logic of the cache is separated from the overall filesystem structure, with the necessary functions being placed into a trait. This will almost certainly be necessary to implement for Rain's save files to work in web assembly.
-- Needs multithreaded support.
-- Should support a more traditional structure with SQL style 'commits', where all modified objects are periodically updated.
+This library creates a Rust cache. It keeps elements alive, but limits the amount kept at a time. Cache operations are done with Arc<RwLock<>>, meaning it could theoretically be multithreaded, but I haven't made thread lock functions for it so it's not practical. The cache functionality is split into backend and frontend to make it flexible in terms of storage.
+## Usage
+To make a backend, implement the following traits:  
+```
+pub trait CacheCompatible<K, V> {
+    type Error;
+
+    fn contains(&self, k: K) -> bool;
+    fn get(&mut self, k: K) -> Result<V, Self::Error>;
+    /// Called when get from cache is finished. This is only required if the backend removes the v to pass to the cache.
+    fn replace(&mut self, k: K, v: V);
+}
+pub trait CacheMutCompatible<K, V>: CacheCompatible<K, V> {
+    fn insert(&mut self, k: K, v: V) -> Result<(), Self::Error>;
+    fn remove(&mut self, k: K) -> Result<(), Self::Error>;
+    /// Should ensure the cache resolves to a stable state. No active references will remain.
+    /// For backends that do not have any notion of backing up, this would not be necessary.
+    fn commit(&mut self) -> Result<(), Self::Error>;
+}
+```
+This can be turned into a cache as so:  
+`let mut cache: CacheMut<i32, String, FolderCache<i32>> = CacheMut::new(folder, 2);`
+where FolderCache<V> is the pre-initialized struct with the Cache and CacheMut traits.  
+The cache allows the online viewing of items in the backend through the functions:  
+```
+fn insert(&mut self, k: K, v: V) -> Result<(), CC::Error>
+fn remove(&mut self, k: &K) -> Result<(), CC::Error>
+fn contains(&self, k: &K) -> bool
+fn get(&self, k: &K) -> Result<CMRef<K, V, CC>, CC::Error>
+fn get_mut(&self, k: &K) -> Result<CMRefMut<K, V, CC>, CC::Error>
+fn commit(&mut self) -> Result<(), CC::Error>
+fn active(&self, k: &K) -> bool
+fn num_active(&self) -> usize
+```
+Note that references retrieved from the cache have no lifespan. The cache will only close (storing all items) when itself and all references are out of scope.
